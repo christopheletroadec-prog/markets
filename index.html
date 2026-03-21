@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Bourse PEA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Clash+Display:wght@400;500;600;700&family=Satoshi:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg: #080b10;
+  --s1: #0d1117;
+  --s2: #131922;
+  --s3: #1a2333;
+  --border: #1e2d42;
+  --border2: #243447;
+  --accent: #3b82f6;
+  --accent-glow: rgba(59,130,246,0.15);
+  --green: #10b981;
+  --green-glow: rgba(16,185,129,0.12);
+  --red: #ef4444;
+  --red-glow: rgba(239,68,68,0.12);
+  --gold: #f59e0b;
+  --text: #f0f4f8;
+  --text2: #94a3b8;
+  --text3: #4a5f7a;
+  --mono: 'DM Mono', monospace;
+  --sans: 'Outfit', sans-serif;
+}
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html, body { height:100%; background:var(--bg); color:var(--text); font-family:var(--sans); overflow:hidden; -webkit-font-smoothing:antialiased; }
+
+/* ── NOISE TEXTURE OVERLAY ── */
+body::before {
+  content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+  opacity:.4;
+}
+
+#app { display:flex; flex-direction:column; height:100vh; max-width:430px; margin:0 auto; position:relative; z-index:1; }
+
+/* ── HEADER ── */
+#header {
+  padding: 52px 20px 0;
+  background: linear-gradient(180deg, #080b10 0%, rgba(8,11,16,0.95) 100%);
+  flex-shrink: 0;
+}
+.header-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+.logo { display:flex; align-items:center; gap:8px; }
+.logo-icon {
+  width:32px; height:32px; border-radius:9px;
+  background:linear-gradient(135deg,#3b82f6,#1d4ed8);
+  display:flex; align-items:center; justify-content:center; font-size:16px;
+  box-shadow: 0 0 20px rgba(59,130,246,.4);
+}
+.logo-text { font-size:16px; font-weight:800; letter-spacing:-.3px; }
+.logo-text em { font-style:normal; color:var(--accent); }
+.status-pill {
+  display:flex; align-items:center; gap:5px; padding:4px 10px;
+  background:var(--s2); border:1px solid var(--border2);
+  border-radius:20px; font-family:var(--mono); font-size:9px; color:var(--text2);
+}
+.status-dot { width:6px; height:6px; border-radius:50%; background:var(--green); animation:blink 2s infinite; }
+.status-dot.loading { background:var(--gold); }
+.status-dot.error { background:var(--red); animation:none; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+/* ── MARKET TICKER ── */
+.ticker-wrap {
+  overflow:hidden; margin: 0 -20px; padding: 8px 0;
+  border-top:1px solid var(--border); border-bottom:1px solid var(--border);
+  background:var(--s1); margin-bottom:0;
+}
+.ticker-track {
+  display:flex; gap:0; white-space:nowrap;
+  animation: scroll-left 40s linear infinite;
+}
+.ticker-track:hover { animation-play-state:paused; }
+@keyframes scroll-left { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
+.ticker-item {
+  display:inline-flex; align-items:center; gap:6px;
+  padding:0 20px; font-family:var(--mono); font-size:10px;
+  border-right:1px solid var(--border);
+}
+.ticker-name { color:var(--text2); }
+.ticker-price { color:var(--text); font-weight:500; }
+
+/* ── TABS ── */
+.tabs-wrap { padding:12px 20px 0; }
+.tabs { display:flex; gap:0; background:var(--s2); border-radius:12px; padding:3px; border:1px solid var(--border); }
+.tab {
+  flex:1; padding:7px 4px; border-radius:9px; border:none; cursor:pointer;
+  font-family:var(--sans); font-size:11px; font-weight:600;
+  background:transparent; color:var(--text3); transition:all .25s;
+}
+.tab.active { background:var(--accent); color:#fff; box-shadow:0 2px 12px rgba(59,130,246,.4); }
+
+/* ── CONTENT ── */
+#content { flex:1; overflow-y:auto; padding:12px 16px 80px; }
+#content::-webkit-scrollbar { display:none; }
+
+/* ── SEARCH ── */
+.search-wrap { position:relative; margin-bottom:12px; }
+.search-input {
+  width:100%; padding:10px 14px 10px 38px;
+  background:var(--s2); border:1px solid var(--border);
+  border-radius:12px; color:var(--text); font-family:var(--sans); font-size:13px; outline:none;
+  transition:border-color .2s;
+}
+.search-input:focus { border-color:var(--accent); }
+.search-icon { position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--text3); font-size:15px; }
+
+/* ── SECTION ── */
+.sec-label {
+  font-size:10px; font-weight:700; letter-spacing:2px; color:var(--text3);
+  text-transform:uppercase; margin:16px 0 8px 2px; display:flex; align-items:center; gap:8px;
+}
+.sec-label::after { content:''; flex:1; height:1px; background:var(--border); }
+
+/* ── STOCK CARD ── */
+.card {
+  background:var(--s1); border:1px solid var(--border);
+  border-radius:16px; padding:13px 14px; margin-bottom:7px;
+  cursor:pointer; transition:all .2s; display:flex; align-items:center; gap:12px;
+  position:relative; overflow:hidden;
+}
+.card::before {
+  content:''; position:absolute; left:0; top:0; bottom:0; width:3px;
+  border-radius:3px 0 0 3px;
+}
+.card.c-pos::before { background:var(--green); }
+.card.c-neg::before { background:var(--red); }
+.card:active { transform:scale(.985); background:var(--s2); }
+.card-logo {
+  width:40px; height:40px; border-radius:12px; background:var(--s3);
+  display:flex; align-items:center; justify-content:center;
+  font-size:11px; font-weight:800; color:var(--text2); flex-shrink:0;
+  border:1px solid var(--border2); font-family:var(--mono);
+}
+.card-body { flex:1; min-width:0; }
+.card-name { font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.card-sub { font-size:10px; color:var(--text3); margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.card-isin { font-size:9px; color:var(--text3); font-family:var(--mono); margin-top:1px; }
+.mini-spark { width:58px; height:28px; flex-shrink:0; }
+.card-right { text-align:right; flex-shrink:0; min-width:72px; }
+.card-price { font-family:var(--mono); font-size:13px; font-weight:500; }
+.badge-chg {
+  display:inline-block; padding:2px 6px; border-radius:5px;
+  font-size:10px; font-weight:600; font-family:var(--mono); margin-top:2px;
+}
+.pos { color:var(--green); background:var(--green-glow); }
+.neg { color:var(--red); background:var(--red-glow); }
+.na { color:var(--text3); background:var(--s3); }
+
+/* ── SKELETON ── */
+.skel-card { background:var(--s1); border:1px solid var(--border); border-radius:16px; padding:13px 14px; margin-bottom:7px; height:66px; display:flex; align-items:center; gap:12px; }
+.skel-logo { width:40px; height:40px; border-radius:12px; flex-shrink:0; }
+.skel-body { flex:1; }
+.skel-line { border-radius:4px; margin:3px 0; }
+.skel { background:linear-gradient(90deg,var(--s2) 25%,var(--s3) 50%,var(--s2) 75%); background-size:200%; animation:sk 1.5s infinite; }
+@keyframes sk { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+/* ── ERROR ── */
+.err-box {
+  background:rgba(239,68,68,.06); border:1px solid rgba(239,68,68,.2);
+  border-radius:14px; padding:20px; text-align:center; margin:12px 0;
+}
+.err-msg { color:var(--red); font-size:13px; font-weight:600; }
+.err-sub { color:var(--text3); font-size:11px; margin-top:4px; }
+.retry-btn {
+  margin-top:12px; padding:8px 20px; background:var(--accent);
+  color:#fff; border:none; border-radius:9px; font-family:var(--sans);
+  font-weight:700; cursor:pointer; font-size:12px;
+}
+
+/* ── MODAL ── */
+#modal {
+  position:fixed; inset:0; background:rgba(0,0,0,.7); z-index:200;
+  display:none; align-items:flex-end; backdrop-filter:blur(4px);
+  max-width:430px; left:50%; transform:translateX(-50%);
+}
+#modal.open { display:flex; }
+.modal-sheet {
+  background:var(--s1); border-radius:28px 28px 0 0; width:100%;
+  padding:0 0 36px; max-height:94vh; overflow-y:auto;
+  border-top:1px solid var(--border2);
+}
+.modal-sheet::-webkit-scrollbar { display:none; }
+.drag-handle { width:36px; height:4px; background:var(--s3); border-radius:2px; margin:14px auto 18px; }
+.modal-head { padding:0 20px 16px; border-bottom:1px solid var(--border); }
+.modal-top-row { display:flex; justify-content:space-between; align-items:flex-start; }
+.modal-name { font-size:22px; font-weight:700; line-height:1.2; }
+.modal-sector { font-size:11px; color:var(--text3); margin-top:4px; }
+.modal-isin { font-size:10px; color:var(--text3); font-family:var(--mono); margin-top:2px; }
+.modal-close {
+  width:34px; height:34px; border-radius:50%; background:var(--s2); border:1px solid var(--border);
+  color:var(--text2); cursor:pointer; font-size:15px; display:flex; align-items:center; justify-content:center; flex-shrink:0;
+}
+.modal-price-block { margin-top:14px; }
+.modal-price { font-family:var(--mono); font-size:28px; font-weight:500; letter-spacing:-1px; }
+.modal-chg { font-family:var(--mono); font-size:13px; margin-top:3px; }
+
+/* PERIOD */
+.period-row { display:flex; gap:4px; padding:14px 20px 10px; }
+.pbtn {
+  flex:1; padding:7px 2px; border-radius:8px; border:none; cursor:pointer;
+  font-family:var(--mono); font-size:10px; font-weight:500;
+  background:var(--s2); color:var(--text3); transition:all .2s;
+  border:1px solid transparent;
+}
+.pbtn.active { background:var(--accent-glow); color:var(--accent); border-color:rgba(59,130,246,.3); }
+
+/* CHART */
+.chart-area { padding:0 14px 8px; height:230px; position:relative; }
+.chart-spinner {
+  position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  color:var(--text3); font-size:12px; gap:8px;
+}
+.spinner { width:16px; height:16px; border:2px solid var(--border2); border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite; }
+@keyframes spin { to{transform:rotate(360deg)} }
+
+/* STATS */
+.stats-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; padding:8px 16px 0; }
+.stat { background:var(--s2); border:1px solid var(--border); border-radius:13px; padding:12px; }
+.stat-l { font-size:9px; font-weight:700; color:var(--text3); text-transform:uppercase; letter-spacing:.8px; }
+.stat-v { font-family:var(--mono); font-size:13px; font-weight:500; margin-top:5px; }
+.stat-full { grid-column:span 2; }
+
+/* ETF BADGES */
+.tag { font-size:9px; padding:2px 6px; border-radius:4px; font-weight:700; margin-left:4px; vertical-align:middle; }
+.t-world { background:rgba(139,92,246,.15); color:#a78bfa; }
+.t-usa   { background:rgba(59,130,246,.15); color:#60a5fa; }
+.t-eu    { background:rgba(16,185,129,.12); color:#34d399; }
+.t-em    { background:rgba(245,158,11,.12); color:#fbbf24; }
+.t-sec   { background:rgba(239,68,68,.1);   color:#f87171; }
+.t-idx   { background:rgba(148,163,184,.08); color:var(--text3); }
+
+/* BOTTOM NAV */
+#nav {
+  position:fixed; bottom:0; left:50%; transform:translateX(-50%);
+  width:100%; max-width:430px;
+  background:rgba(13,17,23,.95); border-top:1px solid var(--border);
+  display:flex; padding:10px 0 calc(10px + env(safe-area-inset-bottom));
+  backdrop-filter:blur(20px);
+}
+.nbtn { flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; background:none; border:none; cursor:pointer; padding:2px; }
+.nbtn-icon { font-size:20px; line-height:1; }
+.nbtn-label { font-size:9px; font-weight:600; color:var(--text3); font-family:var(--sans); }
+.nbtn.on .nbtn-label { color:var(--accent); }
+
+/* QUOTA WARNING */
+.quota-warn {
+  background:rgba(245,158,11,.08); border:1px solid rgba(245,158,11,.2);
+  border-radius:10px; padding:10px 14px; font-size:11px; color:var(--gold);
+  text-align:center; margin-bottom:10px; display:none;
+}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- HEADER -->
+  <div id="header">
+    <div class="header-row">
+      <div class="logo">
+        <div class="logo-icon">📊</div>
+        <div class="logo-text">Bourse <em>PEA</em></div>
+      </div>
+      <div class="status-pill">
+        <div class="status-dot loading" id="sdot"></div>
+        <span id="stext">Connexion…</span>
+      </div>
+    </div>
+
+    <!-- TICKER SCROLLING -->
+    <div class="ticker-wrap">
+      <div class="ticker-track" id="ticker-track">
+        <span class="ticker-item"><span class="ticker-name">CAC 40</span><span class="ticker-price" id="tk-cac">—</span></span>
+        <span class="ticker-item"><span class="ticker-name">TotalEnergies</span><span class="ticker-price" id="tk-tte">—</span></span>
+        <span class="ticker-item"><span class="ticker-name">LVMH</span><span class="ticker-price" id="tk-mc">—</span></span>
+        <span class="ticker-item"><span class="ticker-name">Airbus</span><span class="ticker-price" id="tk-air">—</span></span>
+        <span class="ticker-item"><span class="ticker-name">Thales</span><span class="ticker-price" id="tk-ho">—</span></span>
+        <span class="ticker-item"><span class="ticker-name">Safran</span><span class="ticker-price" id="tk-saf">—</span></span>
+        <span class="ticker-item"><span class="ticker-name">Sanofi</span><span class="ticker-price" id="tk-san">—</span></span>
+        <span class="ticker-item"><span class="ticker-name">MSCI World</span><span class="ticker-price" id="tk-cw8">—</span></span>
+        <!-- duplicate for seamless loop -->
+        <span class="ticker-item"><span class="ticker-name">CAC 40</span><span class="ticker-price" id="tk-cac2">—</span></span>
+        <span class="ticker-item"><span class="ticker-name">TotalEnergies</span><span class="ticker-price" id="tk-tte2">—</span></span>
+        <span class="ticker-item"><span class="ticker-name">LVMH</span><span class="ticker-price" id="tk-mc2">—</span></span>
+        <span class="ticker-item"><span class="ticker-name">Airbus</span><span class="ticker-price" id="tk-air2">—</span></span>
+        <span class="ticker-item"><span class="ticker-name">Thales</span><span class="ticker-price" id="tk-ho2">—</span></span>
+        <span class="ticker-item"><span class="ticker-name">Safran</span><span class="ticker-price" id="tk-saf2">—</span></span>
+        <span class="ticker-item"><span class="ticker-name">Sanofi</span><span class="ticker-price" id="tk-san2">—</span></span>
+        <span class="ticker-item"><span class="ticker-name">MSCI World</span><span class="ticker-price" id="tk-cw82">—</span></span>
+      </div>
+    </div>
+
+    <div class="tabs-wrap">
+      <div class="tabs">
+        <button class="tab active" onclick="switchTab('cac40',this)">CAC 40</button>
+        <button class="tab" onclick="switchTab('indices',this)">Indices</button>
+        <button class="tab" onclick="switchTab('etf',this)">ETF PEA</button>
+        <button class="tab" onclick="switchTab('favs',this)">★</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONTENT -->
+  <div id="content">
+    <div style="height:12px"></div>
+    <div class="quota-warn" id="quota-warn">⚠️ Limite API atteinte — données en cache affichées</div>
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input class="search-input" id="srch" placeholder="Titre, secteur, ISIN…" oninput="doFilter(this.value)">
+    </div>
+    <div id="list"></div>
+  </div>
+
+  <!-- BOTTOM NAV -->
+  <div id="nav">
+    <button class="nbtn on"><span class="nbtn-icon">📈</span><span class="nbtn-label">Marchés</span></button>
+    <button class="nbtn"><span class="nbtn-icon">⭐</span><span class="nbtn-label">Favoris</span></button>
+    <button class="nbtn"><span class="nbtn-icon">🔔</span><span class="nbtn-label">Alertes</span></button>
+    <button class="nbtn"><span class="nbtn-icon">⚙️</span><span class="nbtn-label">Réglages</span></button>
+  </div>
+</div>
+
+<!-- DETAIL MODAL -->
+<div id="modal">
+  <div class="modal-sheet">
+    <div class="drag-handle"></div>
+    <div class="modal-head">
+      <div class="modal-top-row">
+        <div>
+          <div class="modal-name" id="mn"></div>
+          <div class="modal-sector" id="msec"></div>
+          <div class="modal-isin" id="misin"></div>
+        </div>
+        <button class="modal-close" onclick="closeModal()">✕</button>
+      </div>
+      <div class="modal-price-block">
+        <div class="modal-price" id="mprice">—</div>
+        <div class="modal-chg" id="mchg">—</div>
+      </div>
+    </div>
+
+    <div class="period-row">
+      <button class="pbtn" onclick="setPeriod('1week',this)">1S</button>
+      <button class="pbtn active" onclick="setPeriod('1month',this)">1M</button>
+      <button class="pbtn" onclick="setPeriod('1year',this)">1A</button>
+      <button class="pbtn" onclick="setPeriod('5year',this)">5A</button>
+      <button class="pbtn" onclick="setPeriod('10year',this)">10A</button>
+      <button class="pbtn" onclick="setPeriod('20year',this)">20A</button>
+    </div>
+
+    <div class="chart-area">
+      <canvas id="dchart"></canvas>
+      <div class="chart-spinner" id="cspinner">
+        <div class="spinner"></div> Chargement…
+      </div>
+    </div>
+
+    <div class="stats-grid" id="mstats"></div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════════════════════════
+const APIKEY = '5cec7ea98f6d4ee29c0bf2c73893b796';
+const TD = 'https://api.twelvedata.com';
+
+// ═══════════════════════════════════════════════════════════
+// INSTRUMENT CATALOGUE
+// ═══════════════════════════════════════════════════════════
+const CAC40 = [
+  {sym:'AIR',  ex:'EPA', name:'Airbus',              sec:'Aéronautique'},
+  {sym:'ALO',  ex:'EPA', name:'Alstom',              sec:'Transport ferroviaire'},
+  {sym:'CS',   ex:'EPA', name:'AXA',                 sec:'Assurance'},
+  {sym:'BNP',  ex:'EPA', name:'BNP Paribas',         sec:'Banque'},
+  {sym:'EN',   ex:'EPA', name:'Bouygues',             sec:'BTP / Télécom'},
+  {sym:'CAP',  ex:'EPA', name:'Capgemini',            sec:'Conseil IT'},
+  {sym:'CA',   ex:'EPA', name:'Carrefour',            sec:'Distribution'},
+  {sym:'ACA',  ex:'EPA', name:'Crédit Agricole',      sec:'Banque'},
+  {sym:'BN',   ex:'EPA', name:'Danone',               sec:'Agroalimentaire'},
+  {sym:'DSY',  ex:'EPA', name:'Dassault Systèmes',    sec:'Logiciels'},
+  {sym:'ENGI', ex:'EPA', name:'Engie',                sec:'Énergie'},
+  {sym:'EL',   ex:'EPA', name:'EssilorLuxottica',     sec:'Optique'},
+  {sym:'RMS',  ex:'EPA', name:'Hermès',               sec:'Luxe'},
+  {sym:'KER',  ex:'EPA', name:'Kering',               sec:'Luxe'},
+  {sym:'LR',   ex:'EPA', name:'Legrand',              sec:'Électrique'},
+  {sym:'MC',   ex:'EPA', name:'LVMH',                 sec:'Luxe'},
+  {sym:'ML',   ex:'EPA', name:'Michelin',             sec:'Pneumatiques'},
+  {sym:'OR',   ex:'EPA', name:"L'Oréal",              sec:'Cosmétiques'},
+  {sym:'ORA',  ex:'EPA', name:'Orange',               sec:'Télécom'},
+  {sym:'RI',   ex:'EPA', name:'Pernod Ricard',        sec:'Spiritueux'},
+  {sym:'PUB',  ex:'EPA', name:'Publicis',             sec:'Communication'},
+  {sym:'RNO',  ex:'EPA', name:'Renault',              sec:'Automobile'},
+  {sym:'SAF',  ex:'EPA', name:'Safran',               sec:'Aéronautique'},
+  {sym:'SGO',  ex:'EPA', name:'Saint-Gobain',         sec:'Matériaux'},
+  {sym:'SAN',  ex:'EPA', name:'Sanofi',               sec:'Pharma'},
+  {sym:'SU',   ex:'EPA', name:'Schneider Electric',   sec:'Électrique'},
+  {sym:'GLE',  ex:'EPA', name:'Société Générale',     sec:'Banque'},
+  {sym:'STLAM',ex:'MIL', name:'Stellantis',           sec:'Automobile'},
+  {sym:'STM',  ex:'EPA', name:'STMicroelectronics',   sec:'Semi-conducteurs'},
+  {sym:'TEP',  ex:'EPA', name:'Teleperformance',      sec:'Services'},
+  {sym:'HO',   ex:'EPA', name:'Thales',               sec:'Défense / Tech'},
+  {sym:'TTE',  ex:'EPA', name:'TotalEnergies',        sec:'Énergie'},
+  {sym:'URW',  ex:'EPA', name:'Unibail-Rodamco',      sec:'Immobilier'},
+  {sym:'VIE',  ex:'EPA', name:'Veolia',               sec:'Environnement'},
+  {sym:'DG',   ex:'EPA', name:'Vinci',                sec:'BTP / Concessions'},
+  {sym:'VIV',  ex:'EPA', name:'Vivendi',              sec:'Médias'},
+  {sym:'WLN',  ex:'EPA', name:'Worldline',            sec:'Paiements'},
+  {sym:'AF',   ex:'EPA', name:'Air France-KLM',       sec:'Transport aérien'},
+  {sym:'ERF',  ex:'EPA', name:'Eurofins Scientific',  sec:'Sciences de la vie'},
+  {sym:'SW',   ex:'EPA', name:'Sodexo',               sec:'Services collectifs'},
+];
+
+const INDICES = [
+  {sym:'CAC40',    ex:'EPA', name:'CAC 40',          sec:'France — 40 grandes cap.',     type:'idx'},
+  {sym:'DAX',      ex:'XETR', name:'DAX 40',          sec:'Allemagne — 40 grandes cap.',  type:'idx'},
+  {sym:'IBEX35',   ex:'BME', name:'IBEX 35',         sec:'Espagne — 35 grandes cap.',    type:'idx'},
+  {sym:'FTSEMIB',  ex:'MIL', name:'FTSE MIB',        sec:'Italie — 40 grandes cap.',     type:'idx'},
+  {sym:'AEX',      ex:'AMS', name:'AEX',             sec:'Pays-Bas — 25 grandes cap.',   type:'idx'},
+  {sym:'BEL20',    ex:'EBR', name:'BEL 20',          sec:'Belgique — 20 grandes cap.',   type:'idx'},
+  {sym:'SSMI',     ex:'SWX', name:'SMI',             sec:'Suisse — 20 grandes cap.',     type:'idx'},
+  {sym:'STOXX50E', ex:'EPA', name:'Euro Stoxx 50',   sec:'Eurozone — 50 blue chips',     type:'idx'},
+  {sym:'FTSE100',  ex:'LSE', name:'FTSE 100',        sec:'Royaume-Uni — 100 val.',       type:'idx'},
+  {sym:'N100',     ex:'EPA', name:'Euronext 100',    sec:'Europe — 100 blue chips',      type:'idx'},
+];
+
+const ETFS = [
+  // Monde
+  {sym:'CW8',   ex:'EPA', name:'Amundi MSCI World',           sec:'Monde — 1500 val.',        isin:'LU1681043599', type:'world'},
+  {sym:'WPEA',  ex:'EPA', name:'Amundi PEA World',            sec:'Monde élig. PEA',          isin:'FR0013412285', type:'world'},
+  {sym:'EWLD',  ex:'EPA', name:'iShares Core MSCI World',     sec:'Monde — All Cap',          isin:'IE00B4L5Y983', type:'world'},
+  // USA
+  {sym:'500',   ex:'EPA', name:'Amundi PEA S&P 500',          sec:'USA — 500 val.',           isin:'FR0013412277', type:'usa'},
+  {sym:'PANX',  ex:'EPA', name:'Amundi PEA Nasdaq-100',       sec:'USA Tech — 100 val.',      isin:'FR0013412261', type:'usa'},
+  {sym:'PE500', ex:'EPA', name:'BNP Easy S&P 500',            sec:'USA — 500 val.',           isin:'FR0011550185', type:'usa'},
+  // Europe
+  {sym:'PCEU',  ex:'EPA', name:'Amundi PEA Europe',           sec:'Europe élig. PEA',         isin:'FR0013412269', type:'eu'},
+  {sym:'ESE',   ex:'EPA', name:'iShares Core MSCI Europe',    sec:'Europe — 440 val.',        isin:'IE00B4K48X80', type:'eu'},
+  {sym:'SMC',   ex:'EPA', name:'Amundi MSCI Europe Small Cap',sec:'Europe petites cap.',       isin:'LU1681038672', type:'eu'},
+  // Emergents
+  {sym:'PAEEM', ex:'EPA', name:'Amundi PEA Émergents',        sec:'Pays émergents',           isin:'FR0013412253', type:'em'},
+  // Sectoriels
+  {sym:'DFEN',  ex:'EPA', name:'iShares Defense Europe',      sec:'Défense europe',            isin:'IE000716YHJ7', type:'sec'},
+  {sym:'TNO',   ex:'EPA', name:'VanEck Defense ETF',          sec:'Défense mondiale',          isin:'IE0002T0Z298', type:'sec'},
+  {sym:'ENER',  ex:'EPA', name:'Lyxor Energy Stoxx 600',      sec:'Énergie europe',            isin:'LU1834984805', type:'sec'},
+  {sym:'BNKE',  ex:'EPA', name:'Lyxor Euro Banks',            sec:'Banques eurozone',          isin:'LU0378453376', type:'sec'},
+  {sym:'HLTH',  ex:'EPA', name:'iShares Healthcare Europe',   sec:'Santé europe',              isin:'IE00B1TXHL60', type:'sec'},
+  {sym:'EPRA',  ex:'EPA', name:'Amundi EPRA Europe REIT',     sec:'Immobilier europe',         isin:'LU1681039647', type:'sec'},
+  {sym:'SGLD',  ex:'EPA', name:'Invesco Physical Gold ETC',   sec:'Or physique',               isin:'IE00B579F325', type:'sec'},
+];
+
+// ═══════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════
+let liveData = {};        // sym -> {price, change, pct, open, high, low, prevclose, volume}
+let tab = 'cac40';
+let favSet = new Set(JSON.parse(localStorage.getItem('pea_favs')||'[]'));
+let curItem = null;
+let dChart = null;
+let curPeriod = '1month';
+
+// ═══════════════════════════════════════════════════════════
+// FORMAT
+// ═══════════════════════════════════════════════════════════
+const fmt = v => {
+  if (v==null||isNaN(v)) return '—';
+  if (Math.abs(v)>=1e9) return (v/1e9).toFixed(2)+'Md€';
+  if (Math.abs(v)>=1e6) return (v/1e6).toFixed(0)+'M€';
+  if (Math.abs(v)>=1000) return v.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2});
+  if (Math.abs(v)>=10)  return v.toFixed(2);
+  return v.toFixed(3);
+};
+const pct = v => v==null?'—': (v>=0?'+':'')+v.toFixed(2)+'%';
+
+// ═══════════════════════════════════════════════════════════
+// TWELVE DATA API
+// ═══════════════════════════════════════════════════════════
+function tdKey(inst) {
+  return inst.sym + (inst.ex ? ':'+inst.ex : '');
+}
+
+// Batch quote — max 120 symbols per call
+async function fetchBatchQuotes(instruments) {
+  const syms = instruments.map(i => `${i.sym}:${i.ex||'XPAR'}`).join(',');
+  const url = `${TD}/quote?symbol=${encodeURIComponent(syms)}&apikey=${APIKEY}`;
+  try {
+    const r = await fetch(url);
+    const json = await r.json();
+    // If single symbol, Twelve Data returns object directly
+    if (instruments.length === 1) {
+      const key = instruments[0].sym;
+      if (json.close || json.price) {
+        processQuote(instruments[0].sym, json);
+      }
+    } else {
+      Object.entries(json).forEach(([symbol, data]) => {
+        const shortSym = symbol.split(':')[0];
+        processQuote(shortSym, data);
+      });
+    }
+    setStatus('live');
+  } catch(e) {
+    console.error('fetchBatchQuotes', e);
+    setStatus('error');
+  }
+}
+
+function processQuote(sym, d) {
+  if (!d || d.status === 'error') return;
+  liveData[sym] = {
+    price:     parseFloat(d.close || d.price) || null,
+    change:    parseFloat(d.change) || null,
+    pct:       parseFloat(d.percent_change) || null,
+    open:      parseFloat(d.open) || null,
+    high:      parseFloat(d.high) || null,
+    low:       parseFloat(d.low) || null,
+    prevClose: parseFloat(d.previous_close) || null,
+    volume:    parseFloat(d.volume) || null,
+    name:      d.name || null,
+  };
+}
+
+// Time series for chart
+async function fetchTimeSeries(sym, ex, period) {
+  const intervalMap = {
+    '1week':  {interval:'1day',  outputsize:7},
+    '1month': {interval:'1day',  outputsize:30},
+    '1year':  {interval:'1week', outputsize:52},
+    '5year':  {interval:'1month',outputsize:60},
+    '10year': {interval:'1month',outputsize:120},
+    '20year': {interval:'1month',outputsize:240},
+  };
+  const {interval, outputsize} = intervalMap[period]||intervalMap['1month'];
+  const symbol = ex ? `${sym}:${ex}` : sym;
+  const url = `${TD}/time_series?symbol=${encodeURIComponent(symbol)}&interval=${interval}&outputsize=${outputsize}&apikey=${APIKEY}`;
+  const r = await fetch(url);
+  const json = await r.json();
+  if (json.status==='error' || !json.values) throw new Error(json.message||'No data');
+  return json.values.reverse().map(v=>({date:v.datetime, price:parseFloat(v.close)}));
+}
+
+// ═══════════════════════════════════════════════════════════
+// STATUS
+// ═══════════════════════════════════════════════════════════
+function setStatus(state, msg) {
+  const dot = document.getElementById('sdot');
+  const txt = document.getElementById('stext');
+  dot.className = 'status-dot ' + (state==='live'?'':state==='loading'?'loading':'error');
+  txt.textContent = state==='live'?'En direct': state==='loading'?'Chargement…':'Hors ligne';
+}
+
+// ═══════════════════════════════════════════════════════════
+// TICKER BAR
+// ═══════════════════════════════════════════════════════════
+function updateTicker() {
+  const map = {
+    'tk-cac':  {sym:'CAC40',  label:'CAC 40'},
+    'tk-tte':  {sym:'TTE',    label:''},
+    'tk-mc':   {sym:'MC',     label:''},
+    'tk-air':  {sym:'AIR',    label:''},
+    'tk-ho':   {sym:'HO',     label:''},
+    'tk-saf':  {sym:'SAF',    label:''},
+    'tk-san':  {sym:'SAN',    label:''},
+    'tk-cw8':  {sym:'CW8',    label:''},
+  };
+  Object.entries(map).forEach(([id, {sym}]) => {
+    const d = liveData[sym];
+    const el1 = document.getElementById(id);
+    const el2 = document.getElementById(id+'2');
+    if (!d || !el1) return;
+    const pos = (d.pct||0) >= 0;
+    const html = `${fmt(d.price)} <span style="color:${pos?'var(--green)':'var(--red)'}">${pct(d.pct)}</span>`;
+    el1.innerHTML = html;
+    if (el2) el2.innerHTML = html;
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+// SPARKLINE
+// ═══════════════════════════════════════════════════════════
+function drawSpark(canvas, pos) {
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W=canvas.width=58, H=canvas.height=28, n=16;
+  const pts = Array.from({length:n},(_,i)=>
+    H/2+(pos?-1:1)*(Math.sin(i/n*Math.PI*1.8+Math.random()*.4)*7+Math.random()*2-1)
+  );
+  ctx.clearRect(0,0,W,H);
+  const c = pos?'#10b981':'#ef4444';
+  const g=ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,c+'44'); g.addColorStop(1,c+'00');
+  ctx.beginPath(); ctx.moveTo(0,pts[0]);
+  pts.forEach((y,i)=>ctx.lineTo(i*(W/(n-1)),y));
+  ctx.lineTo(W,H); ctx.lineTo(0,H); ctx.closePath();
+  ctx.fillStyle=g; ctx.fill();
+  ctx.beginPath(); ctx.moveTo(0,pts[0]);
+  pts.forEach((y,i)=>ctx.lineTo(i*(W/(n-1)),y));
+  ctx.strokeStyle=c; ctx.lineWidth=1.5; ctx.stroke();
+}
+
+// ═══════════════════════════════════════════════════════════
+// RENDER LIST
+// ═══════════════════════════════════════════════════════════
+function getDS() {
+  if (tab==='favs') {
+    return [...CAC40,...INDICES,...ETFS].filter(s=>favSet.has(s.sym));
+  }
+  return tab==='cac40'?CAC40 : tab==='indices'?INDICES : ETFS;
+}
+
+function tagHTML(type) {
+  const map = {world:['t-world','MONDE'],usa:['t-usa','USA'],eu:['t-eu','EU'],em:['t-em','EM'],sec:['t-sec','SECT'],idx:['t-idx','IDX']};
+  if (!map[type]) return '';
+  const [cls,lbl] = map[type];
+  return `<span class="tag ${cls}">${lbl}</span>`;
+}
+
+function cardHTML(s) {
+  const d = liveData[s.sym];
+  const pos = d && d.pct != null ? d.pct >= 0 : true;
+  const priceStr = d && d.price != null ? fmt(d.price)+' €' : '—';
+  const chgStr   = d && d.pct  != null ? pct(d.pct) : '—';
+  const chgCls   = d && d.pct  != null ? (pos?'pos':'neg') : 'na';
+  const fav = favSet.has(s.sym) ? ' ⭐' : '';
+  return `<div class="card ${d&&d.pct!=null?(pos?'c-pos':'c-neg'):''}" data-sym="${s.sym}" onclick="openModal('${s.sym}')">
+    <div class="card-logo">${s.sym.slice(0,3)}</div>
+    <div class="card-body">
+      <div class="card-name">${s.name}${tagHTML(s.type||'')}${fav}</div>
+      <div class="card-sub">${s.sec}</div>
+      ${s.isin?`<div class="card-isin">${s.isin}</div>`:''}
+    </div>
+    <canvas class="mini-spark"></canvas>
+    <div class="card-right">
+      <div class="card-price">${priceStr}</div>
+      <div class="badge-chg ${chgCls}">${chgStr}</div>
+    </div>
+  </div>`;
+}
+
+function skelHTML(n=8) {
+  return Array.from({length:n},()=>`<div class="skel-card">
+    <div class="skel-logo skel" style="width:40px;height:40px;border-radius:12px;flex-shrink:0"></div>
+    <div class="skel-body"><div class="skel-line skel" style="width:55%;height:13px"></div><div class="skel-line skel" style="width:38%;height:10px"></div></div>
+  </div>`).join('');
+}
+
+function renderList(filter='') {
+  let data = getDS();
+  if (filter) data=data.filter(s=>[s.name,s.sym,s.sec||'',s.isin||''].some(f=>f.toLowerCase().includes(filter.toLowerCase())));
+  if (!data.length) {
+    document.getElementById('list').innerHTML=`<div style="text-align:center;color:var(--text3);padding:40px;font-size:13px">${filter?'Aucun résultat':'Aucun favori ajouté'}</div>`;
+    return;
+  }
+
+  let html='';
+  if (tab==='etf') {
+    [{k:'world',l:'🌍 Monde / Global'},{k:'usa',l:'🇺🇸 États-Unis'},{k:'eu',l:'🇪🇺 Europe'},{k:'em',l:'🌏 Marchés Émergents'},{k:'sec',l:'🔧 Sectoriels'}].forEach(g=>{
+      const items=data.filter(s=>s.type===g.k);
+      if(items.length) html+=`<div class="sec-label">${g.l}</div>`+items.map(cardHTML).join('');
+    });
+  } else if (tab==='indices') {
+    html=`<div class="sec-label">📈 Indices boursiers</div>`+data.map(cardHTML).join('');
+  } else {
+    html=data.map(cardHTML).join('');
+  }
+
+  document.getElementById('list').innerHTML=html;
+  document.querySelectorAll('.card').forEach(c=>{
+    const d=liveData[c.dataset.sym];
+    drawSpark(c.querySelector('canvas'), d&&d.pct!=null?d.pct>=0:true);
+  });
+}
+
+function doFilter(v) { renderList(v); }
+
+// ═══════════════════════════════════════════════════════════
+// MODAL
+// ═══════════════════════════════════════════════════════════
+async function openModal(sym) {
+  const all=[...CAC40,...INDICES,...ETFS];
+  curItem=all.find(s=>s.sym===sym);
+  if(!curItem) return;
+  const d=liveData[sym]||{};
+
+  document.getElementById('mn').textContent=curItem.name;
+  document.getElementById('msec').textContent=curItem.sec;
+  document.getElementById('misin').textContent=curItem.isin||'';
+  document.getElementById('mprice').textContent=d.price!=null?fmt(d.price)+' €':'—';
+  const ce=document.getElementById('mchg');
+  const pos=(d.pct||0)>=0;
+  ce.textContent=(pos?'▲ ':'▼ ')+pct(d.pct)+'  ·  '+(pos?'+':'')+fmt(d.change||0)+'€  aujourd\'hui';
+  ce.className='modal-chg '+(pos?'pos':'neg');
+
+  document.querySelectorAll('.pbtn').forEach((b,i)=>b.classList.toggle('active',i===1));
+  curPeriod='1month';
+  renderStats(d);
+  document.getElementById('modal').classList.add('open');
+  document.getElementById('modal-sheet').scrollTop=0;
+  await loadChart(curItem.sym, curItem.ex, '1month');
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('open');
+  if(dChart){dChart.destroy();dChart=null;}
+}
+
+async function setPeriod(p,btn) {
+  curPeriod=p;
+  document.querySelectorAll('.pbtn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  if(curItem) await loadChart(curItem.sym, curItem.ex, p);
+}
+
+async function loadChart(sym,ex,period) {
+  const spinner=document.getElementById('cspinner');
+  spinner.style.display='flex';
+  if(dChart){dChart.destroy();dChart=null;}
+  try {
+    const hist=await fetchTimeSeries(sym,ex,period);
+    spinner.style.display='none';
+    drawChart(hist);
+  } catch(e) {
+    spinner.innerHTML='⚠️ '+e.message;
+    console.error(e);
+  }
+}
+
+function drawChart(hist) {
+  const labels=hist.map(h=>h.date);
+  const prices=hist.map(h=>h.price);
+  const pos=prices[prices.length-1]>=prices[0];
+  const col=pos?'#10b981':'#ef4444';
+  const ctx=document.getElementById('dchart').getContext('2d');
+  const g=ctx.createLinearGradient(0,0,0,210);
+  g.addColorStop(0,col+'55'); g.addColorStop(1,col+'00');
+  dChart=new Chart(ctx,{
+    type:'line',
+    data:{labels,datasets:[{data:prices,borderColor:col,borderWidth:2,backgroundColor:g,pointRadius:0,tension:.35,fill:true}]},
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{
+        mode:'index',intersect:false,
+        backgroundColor:'#131922',borderColor:'#1e2d42',borderWidth:1,
+        titleFont:{family:'DM Mono',size:9},bodyFont:{family:'DM Mono',size:12},
+        callbacks:{label:c=>'  '+fmt(c.raw)+' €'}
+      }},
+      scales:{
+        x:{display:true,grid:{color:'#1a2333'},ticks:{color:'#4a5f7a',font:{size:9,family:'DM Mono'},maxTicksLimit:6}},
+        y:{display:true,position:'right',grid:{color:'#1a2333'},ticks:{color:'#4a5f7a',font:{size:9,family:'DM Mono'},callback:v=>fmt(v)}}
+      },
+      interaction:{mode:'index',intersect:false}
+    }
+  });
+}
+
+function renderStats(d) {
+  const rows=[
+    ['Ouverture',     d.open?fmt(d.open)+' €':'—'],
+    ['Haut du jour',  d.high?fmt(d.high)+' €':'—'],
+    ['Bas du jour',   d.low?fmt(d.low)+' €':'—'],
+    ['Clôture préc.', d.prevClose?fmt(d.prevClose)+' €':'—'],
+    ['Volume',        d.volume?(d.volume/1e6).toFixed(2)+' M':'—'],
+  ];
+  document.getElementById('mstats').innerHTML=rows.map(([l,v])=>
+    `<div class="stat"><div class="stat-l">${l}</div><div class="stat-v">${v}</div></div>`
+  ).join('') + (curItem&&curItem.isin?`<div class="stat stat-full"><div class="stat-l">ISIN</div><div class="stat-v" style="font-size:11px">${curItem.isin}</div></div>`:'');
+}
+
+// ═══════════════════════════════════════════════════════════
+// TABS & FILTER
+// ═══════════════════════════════════════════════════════════
+function switchTab(t,btn) {
+  tab=t;
+  document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('srch').value='';
+  renderList();
+  loadTabData(t);
+}
+
+async function loadTabData(t) {
+  if(t==='cac40')   await loadInstruments(CAC40,'cac40');
+  if(t==='indices') await loadInstruments(INDICES,'indices');
+  if(t==='etf')     await loadInstruments(ETFS,'etf');
+  if(t==='favs')    await loadFavData();
+}
+
+async function loadInstruments(list, tabName) {
+  setStatus('loading');
+  // Twelve Data free plan: 8 symbols per request for batch, so chunk
+  const chunkSize = 8;
+  for(let i=0;i<list.length;i+=chunkSize) {
+    const chunk=list.slice(i,i+chunkSize);
+    await fetchBatchQuotes(chunk);
+    if(tab===tabName||tab==='favs') renderList(document.getElementById('srch').value);
+    updateTicker();
+    if(i+chunkSize<list.length) await sleep(500); // respect rate limit
+  }
+  setStatus('live');
+}
+
+async function loadFavData() {
+  const all=[...CAC40,...INDICES,...ETFS].filter(s=>favSet.has(s.sym));
+  await fetchBatchQuotes(all);
+  renderList();
+}
+
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+document.getElementById('modal').addEventListener('click',e=>{if(e.target.id==='modal')closeModal();});
+
+// ═══════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════
+(async()=>{
+  document.getElementById('list').innerHTML=skelHTML();
+  await loadInstruments(CAC40,'cac40');
+  // Prefetch other tabs in background
+  loadInstruments(INDICES,'indices');
+  loadInstruments(ETFS,'etf');
+  // Refresh every 60s (Twelve Data free plan rate limits)
+  setInterval(()=>loadTabData(tab), 600_000);
+})();
+</script>
+</body>
+</html>
